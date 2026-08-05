@@ -436,6 +436,37 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(180, 85, 61, 0.12);
   }
+  /* 简答题长文本输入：多行 textarea，自动换行不横向滚动 */
+  .fill-textarea {
+    width: 100%; min-height: 120px; max-height: 320px;
+    padding: 14px 16px;
+    font-family: var(--font-body); font-size: 15px; line-height: 1.7;
+    color: var(--ink);
+    background: rgba(255,255,255,0.55);
+    border: 1.5px solid rgba(40,31,21,0.12);
+    border-radius: var(--r-btn);
+    outline: none;
+    resize: vertical;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;      /* 保留用户换行 */
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .fill-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(180, 85, 61, 0.12);
+  }
+  /* 锁定后显示的用户答案（长文本换行） */
+  .short-my-answer {
+    margin-top: 10px; font-size: 14.5px; line-height: 1.8;
+    color: var(--ink-2);
+    background: rgba(255,255,255,0.45);
+    padding: 12px 14px; border-radius: var(--r-row);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-height: 300px; overflow-y: auto;
+  }
   .fill-submit {
     margin-top: 12px; width: 100%; padding: 14px;
     font-family: var(--font-body); font-size: 16px; font-weight: 600;
@@ -978,7 +1009,8 @@ function render(animate) {
   const i = state.order[state.idx];
   const q = QUESTIONS[i];
   const qid = qidOf(q);
-  const answered = state.answered[qid];
+  // 错题模式：视为未作答（先作答再出答案），重做不计统计
+  const answered = state.mode === "wrong" ? undefined : state.answered[qid];
 
   const done = Object.keys(state.answered).length;
   document.getElementById("p-pos").textContent = (state.idx+1) + "/" + state.order.length;
@@ -999,24 +1031,44 @@ function render(animate) {
       q.options.forEach((opt) => {
         const letter = opt.match(/^([A-E])[.、]/);
         const cls = answered ? (letter && letter[1] === q.answer ? "correct" : (answered.my === letter[1] ? "wrong" : "")) : "";
-        h += `<div class="opt ${cls}" onclick="answer('${qid}','${letter ? letter[1] : ""}')">${escapeHtml(opt)}</div>`;
+        // 已答锁定：onclick 置空，视觉加 locked（不透明度降低）
+        const click = answered ? "" : `onclick="answer('${qid}','${letter ? letter[1] : ""}')"`;
+        h += `<div class="opt ${cls}${answered ? ' locked' : ''}" ${click}>${escapeHtml(opt)}</div>`;
       });
       h += '</div>';
     } else if (q.type === "judge") {
       h += '<div class="judge-row">';
       ["√","×"].forEach(v => {
         const cls = answered ? (v === q.answer ? "correct" : (answered.my === v ? "wrong" : "")) : "";
-        h += `<div class="judge-btn ${cls}" onclick="answer('${qid}','${v}')">${v}</div>`;
+        const click = answered ? "" : `onclick="answer('${qid}','${v}')"`;
+        h += `<div class="judge-btn ${cls}${answered ? ' locked' : ''}" ${click}>${v}</div>`;
       });
       h += '</div>';
     } else if (q.type === "fill") {
-      h += `<input class="fill-input" id="fill-input" type="text" placeholder="请输入答案" value="${answered && answered.my ? escapeHtml(String(answered.my)) : ""}">`;
-      h += `<button class="fill-submit" onclick="submitFill('${qid}')">${answered ? "重新提交" : "提交答案"}</button>`;
+      const locked = answered ? " disabled" : "";
+      h += `<input class="fill-input" id="fill-input" type="text" placeholder="请输入答案" value="${answered && answered.my ? escapeHtml(String(answered.my)) : ""}"${locked}>`;
+      h += `<button class="fill-submit" onclick="submitFill('${qid}')"${locked}>${answered ? "已提交" : "提交答案"}</button>`;
     } else {
-      h += '<div class="short-ans"><button class="ans-toggle" onclick="toggleAns(this)"><span class="chev">▼</span>查看参考答案</button><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div></div>';
-      h += '<div class="self-row">';
-      h += `<button class="self-btn self-no ${answered && answered.my === 'self-no' ? 'chosen' : ''}" onclick="answer('${qid}','self-no')">❌ 我没答对</button>`;
-      h += `<button class="self-btn self-ok ${answered && answered.my === 'self-ok' ? 'chosen' : ''}" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
+      // 简答题三态：未提交（textarea）→ 待自评（我的答案+参考答案+自评）→ 已自评（锁定）
+      h += '<div class="short-ans">';
+      if (!answered) {
+        // 未提交：textarea + 提交
+        h += `<textarea class="fill-textarea" id="short-input" placeholder="请输入你的答案"></textarea>`;
+        h += `<button class="fill-submit" onclick="submitShort('${qid}')">提交答案</button>`;
+      } else if (answered.pending) {
+        // 待自评：我的答案 + 参考答案 + 自评按钮
+        h += '<div class="short-my-answer">' + escapeHtml(String(answered.my)) + '</div>';
+        h += '<button class="ans-toggle" onclick="toggleAns(this)"><span class="chev">▼</span>查看参考答案</button><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div>';
+        h += '<div class="self-row">';
+        h += `<button class="self-btn self-no" onclick="answer('${qid}','self-no')">❌ 我没答对</button>`;
+        h += `<button class="self-btn self-ok" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
+        h += '</div>';
+      } else {
+        // 已自评：锁定（我的答案 + 参考答案 + 反馈）
+        h += '<div class="short-my-answer">' + escapeHtml(String(answered.text || answered.my)) + '</div>';
+        h += '<button class="ans-toggle" onclick="toggleAns(this)"><span class="chev">▼</span>查看参考答案</button><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div>';
+        h += `<div class="feedback show ${answered.ok ? "ok" : "err"}">${answered.ok ? "✅ 自评：答对了！" : "❌ 自评：没答对（已加入错题本）"}</div>`;
+      }
       h += '</div>';
     }
     if (answered && q.type !== "short") {
@@ -1037,9 +1089,23 @@ function render(animate) {
     html += buildBody();
     html += '</div></div>';
     area.innerHTML = html;
+    // 输入框回车 = 提交答案（填空/简答），永不跳题
     if (q.type === "fill" && !answered) {
       const inp = document.getElementById("fill-input");
-      if (inp) inp.focus();
+      if (inp) {
+        inp.focus();
+        inp.addEventListener("keydown", e => {
+          if (e.key === "Enter") { e.preventDefault(); submitFill(qid); }
+        });
+      }
+    } else if (q.type === "short" && !answered) {
+      const ta = document.getElementById("short-input");
+      if (ta) {
+        ta.addEventListener("keydown", e => {
+          // Enter 提交；Shift+Enter 换行
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitShort(qid); }
+        });
+      }
     }
     document.getElementById("s-total").textContent = state.totalAnswered;
     document.getElementById("s-ok").textContent = state.totalOk;
@@ -1078,17 +1144,26 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-// ===== 答题（upsert 模式：可重复提交，统计/错题本保持一致） =====
+// ===== 答题（提交即锁定；错题模式=重做不计统计；简答三态：未提交→待自评→已自评） =====
 function answer(qid, val) {
   const i = state.order[state.idx];
   const q = QUESTIONS[i];
-  let ok;
-  if (q.type === "short") ok = val === "self-ok";
-  else ok = val === q.answer;
-  record(qid, ok, val);
+  if (q.type === "short") {
+    // 简答：自评（仅从"已提交待自评"状态进入）
+    const prev = state.answered[qid];
+    if (!prev || !prev.pending) return;
+    const ok = val === "self-ok";
+    record(qid, ok, val, prev.my);
+  } else {
+    // 选择/判断：非错题模式已答锁定；错题模式允许重做
+    if (state.answered[qid] && state.mode !== "wrong") return;
+    const ok = val === q.answer;
+    record(qid, ok, val);
+  }
   render(false);
 }
 function submitFill(qid) {
+  if (state.answered[qid] && state.mode !== "wrong") return;
   const val = document.getElementById("fill-input").value;
   const i = state.order[state.idx];
   const q = QUESTIONS[i];
@@ -1096,28 +1171,40 @@ function submitFill(qid) {
   record(qid, ok, val.trim());
   render(false);
 }
+function submitShort(qid) {
+  if (state.answered[qid] && state.mode !== "wrong") return;
+  const val = document.getElementById("short-input").value;
+  if (!val.trim()) return;   // 空答案不提交
+  // 提交简答：保存文本，进入"待自评"状态（不计数，自评时才计）
+  state.answered[qid] = {ok: false, my: val, pending: true};
+  saveState();
+  render(false);
+}
 /**
- * 数据库式 upsert：已答过则更新记录（修正统计），未答过则插入
- * - 答对→答错：totalOk-1，加入错题本
- * - 答错→答对：totalOk+1，从错题本移除
- * - 未答→首次：totalAnswered+1
+ * 提交记录：
+ * - 正常作答（首次）：计数 totalAnswered，答对 totalOk+1
+ * - 错题模式重做：不计入统计，只维护错题集（答对移除/答错保留）
+ * - 答对：若该题在错题集（跨轮次遗留），移除
  */
-function record(qid, ok, my) {
-  const prev = state.answered[qid];
-  if (prev) {
-    // 更新已有记录：先撤销旧判定对统计的影响
-    if (prev.ok && !ok) state.totalOk--;
-    if (!prev.ok && ok) state.totalOk++;
-    // 错题本同步
-    if (!ok && !state.wrongIds.includes(qid)) state.wrongIds.push(qid);
-    if (ok) state.wrongIds = state.wrongIds.filter(x => x !== qid);
+function record(qid, ok, my, text) {
+  const redo = state.mode === "wrong";   // 错题模式 = 重做（不计数）
+  if (state.answered[qid] && !redo && !text) return;
+  if (text) {
+    // 简答自评：保留用户文本
+    state.answered[qid] = {ok, my, text};
   } else {
-    // 首次作答
+    state.answered[qid] = {ok, my};
+  }
+  if (!redo) {
     state.totalAnswered++;
     if (ok) state.totalOk++;
-    else state.wrongIds.push(qid);
   }
-  state.answered[qid] = {ok, my};
+  // 错题集维护（跨轮次）
+  if (ok) {
+    state.wrongIds = state.wrongIds.filter(x => x !== qid);
+  } else {
+    if (!state.wrongIds.includes(qid)) state.wrongIds.push(qid);
+  }
   saveState();
   // 答对自动下一题（延迟 700ms 展示反馈；最后一题或空题序不跳）
   if (ok) {
@@ -1269,9 +1356,9 @@ document.getElementById("btn-fav").onclick = () => {
   state.idx = 0; state.order = filterQuestions(); saveState(); render("card");
 };
 document.getElementById("btn-clear").onclick = () => {
-  if (!confirm("确定清除全部答题记录和错题？\n（收藏不会清除）")) return;
+  if (!confirm("确定清除全部答题记录和统计？\n（错题集和收藏夹保留）")) return;
   state.answered = {};
-  state.wrongIds = [];
+  // 错题集保留（跨轮次）；收藏夹保留
   state.totalAnswered = 0;
   state.totalOk = 0;
   saveState(); render("card");
@@ -1293,7 +1380,8 @@ function toggleAns(btn) {
 document.getElementById("btn-next").onclick = next;
 document.getElementById("btn-prev").onclick = prev;
 document.addEventListener("keydown", e => {
-  if (e.key === "ArrowRight" || e.key === "Enter") next();
+  // 回车永远不触发下一题（输入框内回车=提交答案，由输入框自身的 keydown 处理）
+  if (e.key === "ArrowRight") next();
   if (e.key === "ArrowLeft") prev();
 });
 
