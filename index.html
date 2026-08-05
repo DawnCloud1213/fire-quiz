@@ -304,17 +304,42 @@
     border-radius: var(--r-panel);
     padding: 22px 20px;
     position: relative;
-    animation: glassIn 0.45s var(--spring-standard) both;
   }
-  /* 切题时卡片淡入上浮 */
-  .card.enter { animation: cardIn 0.45s var(--spring-standard) both; }
-  @keyframes cardIn {
-    from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  /* ===== 切题动画：内容层过渡（容器稳定，Apple content transition） ===== */
+  /* 旧内容退出 */
+  .q-body.leaving {
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 150ms ease-in, transform 150ms ease-in;
+  }
+  /* 新内容进入 */
+  .q-body.entering {
+    animation: qBodyIn 350ms var(--spring-standard) both;
+  }
+  @keyframes qBodyIn {
+    from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: none; }
   }
-  @keyframes glassIn {
-    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+
+  /* ===== 模式切换动画：整卡离场+入场（空间一致性，Apple §7） ===== */
+  .card-leave {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 150ms ease-in, transform 150ms ease-in;
+  }
+  .card-enter {
+    animation: cardEnter 350ms var(--spring-standard) both;
+  }
+  @keyframes cardEnter {
+    from { opacity: 0; transform: translateY(14px); }
     to   { opacity: 1; transform: none; }
+  }
+  .empty-leave {
+    opacity: 0;
+    transition: opacity 150ms ease-in;
+  }
+  .empty-enter {
+    animation: qBodyIn 350ms var(--spring-standard) both;
   }
 
   .q-head {
@@ -408,12 +433,37 @@
     cursor: pointer; color: var(--accent-strong);
     font-size: 14px; font-weight: 600;
     font-family: var(--font-body);
+    list-style: none;
+    display: flex; align-items: center; gap: 6px;
+    -webkit-user-select: none; user-select: none;
   }
+  .short-ans summary::-webkit-details-marker { display: none; }
+  .short-ans summary .chev {
+    display: inline-block;
+    transition: transform 300ms var(--spring-standard);
+    font-size: 10px;
+  }
+  .short-ans details[open] summary .chev { transform: rotate(180deg); }
+  /* 手风琴展开：grid 0fr→1fr 可动画高度（Chrome 107+/Safari 16+，双端兼容） */
+  .ans-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 350ms var(--spring-standard);
+  }
+  .short-ans details[open] .ans-wrap { grid-template-rows: 1fr; }
+  .ans-wrap > div { overflow: hidden; }
   .short-ans .ans-body {
     margin-top: 10px; font-size: 14.5px; line-height: 1.9;
     color: var(--ink-2);
     background: rgba(255,255,255,0.45);
     padding: 14px; border-radius: var(--r-row);
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 250ms ease 80ms, transform 250ms var(--spring-standard) 80ms;
+  }
+  .short-ans details[open] .ans-body {
+    opacity: 1;
+    transform: none;
   }
 
   .self-row { display: flex; gap: 10px; margin-top: 16px; }
@@ -545,6 +595,8 @@
   /* 减少动效偏好 */
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
+    .q-body.leaving, .card-leave { opacity: 0; transform: none; }
+    .q-body.entering, .card-enter, .empty-enter { animation: none !important; opacity: 1; }
     .glass-liquid::after, .glass-frost::after { display: none; }
   }
   /* 减弱透明度偏好 */
@@ -838,18 +890,31 @@ function filterQuestions() {
 }
 
 // ===== 渲染 =====
+// animate: false=无动画直接替换; "qbody"=切题(内容层过渡); "card"=切模式(整卡离场入场); "empty"=空状态过渡
+let _pendingRender = null;
 function render(animate) {
   const area = document.getElementById("quiz-area");
   const empty = document.getElementById("empty");
+
+  // 空状态处理（带离场/入场）
   if (!state.order.length) {
-    area.innerHTML = "";
-    empty.style.display = "block";
-    empty.innerHTML = state.mode === "wrong"
-      ? '🎉 没有错题了！<br><button onclick="resetProgress()">重置进度 / 清空错题</button>'
-      : state.mode === "fav"
-        ? '⭐ 收藏夹还是空的<br>在题目卡左上角点 ☆ 即可收藏<br><button onclick="resetProgress()">清空全部数据</button>'
-        : '🎉 没有题了！<br><button onclick="resetProgress()">重置进度 / 清空错题</button>';
-    document.getElementById("stats-row").style.display = "none";
+    const doEmpty = () => {
+      area.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = state.mode === "wrong"
+        ? '🎉 没有错题了！<br><button onclick="resetProgress()">重置进度 / 清空错题</button>'
+        : state.mode === "fav"
+          ? '⭐ 收藏夹还是空的<br>在题目卡左上角点 ☆ 即可收藏<br><button onclick="resetProgress()">清空全部数据</button>'
+          : '🎉 没有题了！<br><button onclick="resetProgress()">重置进度 / 清空错题</button>';
+      document.getElementById("stats-row").style.display = "none";
+    };
+    if (animate && (area.querySelector(".card") || empty.style.display === "block")) {
+      const target = area.querySelector(".card") ? area.querySelector(".card") : empty;
+      target.classList.add("empty-leave");
+      setTimeout(doEmpty, 160);
+    } else {
+      doEmpty();
+    }
     return;
   }
   empty.style.display = "none";
@@ -867,58 +932,88 @@ function render(animate) {
 
   const typeName = {choice:"选择题", judge:"判断题", fill:"填空题", short:"简答题"}[q.type];
   const isFav = state.favIds.includes(qid);
-  let html = '<div class="card glass-frost' + (animate ? ' enter' : '') + '">';
-  html += `<div class="q-head"><span class="crumb">卷<b>${q.paper}</b> · ${typeName} · 第 ${q.no} 题</span>`;
-  html += `<button class="fav-btn ${isFav ? 'on' : ''}" onclick="toggleFav('${qid}')" title="${isFav ? '取消收藏' : '收藏本题'}">${isFav ? '★' : '☆'}</button>`;
-  html += `<span class="tag" style="margin-left:auto;">${state.idx+1}/${state.order.length}</span></div>`;
-  html += `<div class="q-stem">${escapeHtml(q.stem)}</div>`;
 
-  if (q.type === "choice") {
-    html += '<div class="opt-list">';
-    q.options.forEach((opt, oi) => {
-      const letter = opt.match(/^([A-E])[.、]/);
-      const cls = answered ? (letter && letter[1] === q.answer ? "correct" : (answered.my === letter[1] ? "wrong" : "")) : "";
-      html += `<div class="opt ${cls}" onclick="answer('${qid}','${letter ? letter[1] : ""}')">${escapeHtml(opt)}</div>`;
-    });
-    html += '</div>';
-  } else if (q.type === "judge") {
-    html += '<div class="judge-row">';
-    ["√","×"].forEach(v => {
-      const cls = answered ? (v === q.answer ? "correct" : (answered.my === v ? "wrong" : "")) : "";
-      html += `<div class="judge-btn ${cls}" onclick="answer('${qid}','${v}')">${v}</div>`;
-    });
-    html += '</div>';
-  } else if (q.type === "fill") {
-    html += `<input class="fill-input" id="fill-input" type="text" placeholder="请输入答案" value="${answered && answered.my ? escapeHtml(String(answered.my)) : ""}">`;
-    html += `<button class="fill-submit" onclick="submitFill('${qid}')">${answered ? "重新提交" : "提交答案"}</button>`;
+  // 生成题目内容（不含卡片壳，供内容层动画复用）
+  function buildBody() {
+    let h = `<div class="q-head"><span class="crumb">卷<b>${q.paper}</b> · ${typeName} · 第 ${q.no} 题</span>`;
+    h += `<button class="fav-btn ${isFav ? 'on' : ''}" onclick="toggleFav('${qid}')" title="${isFav ? '取消收藏' : '收藏本题'}">${isFav ? '★' : '☆'}</button>`;
+    h += `<span class="tag" style="margin-left:auto;">${state.idx+1}/${state.order.length}</span></div>`;
+    h += `<div class="q-stem">${escapeHtml(q.stem)}</div>`;
+    if (q.type === "choice") {
+      h += '<div class="opt-list">';
+      q.options.forEach((opt) => {
+        const letter = opt.match(/^([A-E])[.、]/);
+        const cls = answered ? (letter && letter[1] === q.answer ? "correct" : (answered.my === letter[1] ? "wrong" : "")) : "";
+        h += `<div class="opt ${cls}" onclick="answer('${qid}','${letter ? letter[1] : ""}')">${escapeHtml(opt)}</div>`;
+      });
+      h += '</div>';
+    } else if (q.type === "judge") {
+      h += '<div class="judge-row">';
+      ["√","×"].forEach(v => {
+        const cls = answered ? (v === q.answer ? "correct" : (answered.my === v ? "wrong" : "")) : "";
+        h += `<div class="judge-btn ${cls}" onclick="answer('${qid}','${v}')">${v}</div>`;
+      });
+      h += '</div>';
+    } else if (q.type === "fill") {
+      h += `<input class="fill-input" id="fill-input" type="text" placeholder="请输入答案" value="${answered && answered.my ? escapeHtml(String(answered.my)) : ""}">`;
+      h += `<button class="fill-submit" onclick="submitFill('${qid}')">${answered ? "重新提交" : "提交答案"}</button>`;
+    } else {
+      h += '<div class="short-ans"><details><summary><span class="chev">▼</span>查看参考答案</summary><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div></details></div>';
+      h += '<div class="self-row">';
+      h += `<button class="self-btn self-ok ${answered && answered.my === 'self-ok' ? 'chosen' : ''}" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
+      h += `<button class="self-btn self-no ${answered && answered.my === 'self-no' ? 'chosen' : ''}" onclick="answer('${qid}','self-no')">❌ 我没答对</button>`;
+      h += '</div>';
+    }
+    if (answered && q.type !== "short") {
+      const ok = answered.ok;
+      h += `<div class="feedback show ${ok ? "ok" : "err"}">${ok ? "✅ 回答正确！" : "❌ 回答错误"}`;
+      if (!ok) h += `<br>正确答案：<b>${escapeHtml(String(q.answer))}</b>`;
+      h += '</div>';
+    } else if (answered && q.type === "short" && answered.my) {
+      const ok = answered.ok;
+      h += `<div class="feedback show ${ok ? "ok" : "err"}">${ok ? "✅ 自评：答对了！" : "❌ 自评：没答对（已加入错题本）"}</div>`;
+    }
+    return h;
+  }
+
+  const doRender = () => {
+    let html = '<div class="card glass-frost">';
+    if (animate === "card") html = '<div class="card glass-frost card-enter">';
+    html += '<div class="q-body' + (animate === "qbody" ? ' entering' : '') + '">';
+    html += buildBody();
+    html += '</div></div>';
+    area.innerHTML = html;
+    if (q.type === "fill" && !answered) {
+      const inp = document.getElementById("fill-input");
+      if (inp) inp.focus();
+    }
+    document.getElementById("s-total").textContent = state.totalAnswered;
+    document.getElementById("s-ok").textContent = state.totalOk;
+    document.getElementById("s-rate").textContent = state.totalAnswered ? Math.round(state.totalOk/state.totalAnswered*100) + "%" : "0%";
+  };
+
+  // 动画调度
+  if (animate === "qbody") {
+    // 切题：旧内容退出 → 替换 → 新内容进入（容器不动）
+    const oldBody = area.querySelector(".q-body");
+    if (oldBody) {
+      oldBody.classList.add("leaving");
+      setTimeout(doRender, 160);
+    } else {
+      doRender();
+    }
+  } else if (animate === "card") {
+    // 切模式：整卡离场 → 替换 → 整卡入场
+    const oldCard = area.querySelector(".card");
+    if (oldCard) {
+      oldCard.classList.add("card-leave");
+      setTimeout(doRender, 160);
+    } else {
+      doRender();
+    }
   } else {
-    html += '<div class="short-ans"><details><summary>查看参考答案</summary><div class="ans-body">' + escapeHtml(q.answer) + '</div></details></div>';
-    // 自评按钮始终显示（upsert：可改判）
-    html += '<div class="self-row">';
-    html += `<button class="self-btn self-ok ${answered && answered.my === 'self-ok' ? 'chosen' : ''}" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
-    html += `<button class="self-btn self-no ${answered && answered.my === 'self-no' ? 'chosen' : ''}" onclick="answer('${qid}','self-no')">❌ 我没答对</button>`;
-    html += '</div>';
+    doRender();
   }
-
-  if (answered && q.type !== "short") {
-    const ok = answered.ok;
-    html += `<div class="feedback show ${ok ? "ok" : "err"}">${ok ? "✅ 回答正确！" : "❌ 回答错误"}`;
-    if (!ok) html += `<br>正确答案：<b>${escapeHtml(String(q.answer))}</b>`;
-    html += '</div>';
-  } else if (answered && q.type === "short" && answered.my) {
-    const ok = answered.ok;
-    html += `<div class="feedback show ${ok ? "ok" : "err"}">${ok ? "✅ 自评：答对了！" : "❌ 自评：没答对（已加入错题本）"}</div>`;
-  }
-  html += '</div>';
-  area.innerHTML = html;
-  if (q.type === "fill" && !answered) {
-    const inp = document.getElementById("fill-input");
-    if (inp) inp.focus();
-  }
-
-  document.getElementById("s-total").textContent = state.totalAnswered;
-  document.getElementById("s-ok").textContent = state.totalOk;
-  document.getElementById("s-rate").textContent = state.totalAnswered ? Math.round(state.totalOk/state.totalAnswered*100) + "%" : "0%";
 }
 
 function escapeHtml(s) {
@@ -977,7 +1072,7 @@ function record(qid, ok, my) {
           state.order.length && state.idx < state.order.length - 1) {
         state.idx++;
         saveState();
-        render(true);
+        render("qbody");
       }
     }, 700);
   }
@@ -986,11 +1081,11 @@ function record(qid, ok, my) {
 // ===== 导航（切题带卡片动画） =====
 function next() {
   clearTimeout(state._autoNextTimer);
-  if (state.idx < state.order.length - 1) { state.idx++; saveState(); render(true); }
+  if (state.idx < state.order.length - 1) { state.idx++; saveState(); render("qbody"); }
 }
 function prev() {
   clearTimeout(state._autoNextTimer);
-  if (state.idx > 0) { state.idx--; saveState(); render(true); }
+  if (state.idx > 0) { state.idx--; saveState(); render("qbody"); }
 }
 
 // ===== 自研液态玻璃下拉 =====
@@ -1046,7 +1141,7 @@ function initDropdown(which) {
       opts.forEach(o => o.classList.toggle("selected", o === opt));
       panel.classList.remove("show");
       btn.classList.remove("open");
-      render(true);
+      render("card");
     });
   });
 }
@@ -1096,7 +1191,7 @@ document.getElementById("btn-random").onclick = () => {
     // 恢复顺序：全部题（含已答，便于回顾）
     state.order = filterQuestions();
   }
-  state.idx = 0; saveState(); render(true);
+  state.idx = 0; saveState(); render("card");
 };
 document.getElementById("btn-wrong").onclick = () => {
   state.mode = state.mode === "wrong" ? "paper" : "wrong";
@@ -1104,7 +1199,7 @@ document.getElementById("btn-wrong").onclick = () => {
   document.getElementById("btn-random").classList.remove("active");
   document.getElementById("btn-wrong").classList.toggle("active", state.mode === "wrong");
   document.getElementById("btn-fav").classList.remove("active");
-  state.idx = 0; state.order = filterQuestions(); saveState(); render(true);
+  state.idx = 0; state.order = filterQuestions(); saveState(); render("card");
 };
 document.getElementById("btn-fav").onclick = () => {
   state.mode = state.mode === "fav" ? "paper" : "fav";
@@ -1112,7 +1207,7 @@ document.getElementById("btn-fav").onclick = () => {
   document.getElementById("btn-random").classList.remove("active");
   document.getElementById("btn-fav").classList.toggle("active", state.mode === "fav");
   document.getElementById("btn-wrong").classList.remove("active");
-  state.idx = 0; state.order = filterQuestions(); saveState(); render(true);
+  state.idx = 0; state.order = filterQuestions(); saveState(); render("card");
 };
 document.getElementById("btn-clear").onclick = () => {
   if (!confirm("确定清除全部答题记录和错题？\n（收藏不会清除）")) return;
@@ -1120,7 +1215,7 @@ document.getElementById("btn-clear").onclick = () => {
   state.wrongIds = [];
   state.totalAnswered = 0;
   state.totalOk = 0;
-  saveState(); render(true);
+  saveState(); render("card");
 };
 
 function toggleFav(qid) {
@@ -1141,7 +1236,7 @@ function resetProgress() {
   state = { mode:"paper", paper:"ALL", type:"ALL", shuffle:false, order:[], idx:0, answered:{}, wrongIds:[], favIds:[], totalAnswered:0, totalOk:0 };
   document.getElementById("btn-random").classList.remove("active");
   state.order = filterQuestions();
-  saveState(); render(true);
+  saveState(); render("card");
 }
 window.resetProgress = resetProgress;
 
