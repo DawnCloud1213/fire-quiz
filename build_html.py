@@ -533,21 +533,22 @@ html = """<!DOCTYPE html>
     box-shadow: 0 4px 14px rgba(91,122,84,0.30);
   }
 
-  /* 统计区：液态玻璃 */
+  /* 统计区：液态玻璃（紧凑高度，避免把切题按钮挤出屏外） */
   .stats {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
-    margin: 6px 16px 14px;
-    padding: 12px;
+    margin: 4px 16px 10px;
+    padding: 8px 10px;
     border-radius: var(--r-card);
     animation: glassIn 0.5s var(--spring-standard) both;
   }
-  .stat { text-align: center; padding: 8px 4px; }
+  .stat { text-align: center; padding: 4px 4px; }
   .stat .num {
     font-family: var(--font-display);
-    font-size: 24px; font-weight: 700;
+    font-size: 20px; font-weight: 700;
+    line-height: 1.15;
     color: var(--accent-strong);
   }
-  .stat .lbl { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+  .stat .lbl { font-size: 11px; color: var(--ink-3); margin-top: 2px; line-height: 1.2; }
 
   #empty { text-align: center; padding: 70px 24px; color: var(--ink-3); font-size: 15px; line-height: 2; view-transition-name: quiz-empty; }
   ::view-transition-old(quiz-empty) { animation: vtCardOld 140ms ease-in both; }
@@ -646,7 +647,7 @@ html = """<!DOCTYPE html>
     .toolbar .btn-clear { flex: 1 1 100%; }
     #quiz-area { padding: 2px 10px 8px; }
     .progress { margin: 0 10px 12px; padding: 8px 12px; }
-    .stats { margin: 4px 10px 12px; }
+    .stats { margin: 2px 10px 8px; }
     footer { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
     .q-stem { font-size: 16px; line-height: 1.8; }
     /* 触摸目标放大（44px 触控标准） */
