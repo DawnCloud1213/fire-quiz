@@ -52,7 +52,7 @@
     --font-body: -apple-system, "PingFang SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
 
     /* 弹簧动效参数（Apple：damping 1.0 默认，0.8 带弹性） */
-    --spring-standard: cubic-bezier(0.34, 1.2, 0.64, 1);   /* 弹出：轻微过冲 */
+    --spring-standard: cubic-bezier(0.34, 1.6, 0.64, 1);  /* 弹簧：明显过冲回弹（iOS 手感） */
     --spring-settle: cubic-bezier(0.22, 1, 0.36, 1);        /* 收敛：缓出 */
     --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
   }
@@ -241,12 +241,14 @@
     opacity: 0; visibility: hidden;
     transform: translateY(-8px) scale(0.96);
     transform-origin: top center;
-    transition: opacity 0.22s var(--spring-settle), transform 0.32s var(--spring-standard), visibility 0s 0.28s;
+    /* 收起：transform 用弹簧（回弹可见），opacity 用慢速淡出（比回弹更晚结束） */
+    transition: opacity 0.5s ease-out 0.05s, transform 0.38s var(--spring-standard), visibility 0s 0.55s;
   }
   .drop-panel.show {
     opacity: 1; visibility: visible;
     transform: none;
-    transition: opacity 0.22s var(--spring-settle), transform 0.32s var(--spring-standard), visibility 0s;
+    /* 展开：opacity 快速淡入，transform 弹簧（轻微过冲） */
+    transition: opacity 0.22s ease-out, transform 0.38s var(--spring-standard), visibility 0s;
   }
   .drop-opt {
     position: relative; z-index: 5;
