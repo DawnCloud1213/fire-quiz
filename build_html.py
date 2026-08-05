@@ -529,8 +529,8 @@ html = """<!DOCTYPE html>
   .nav-row button:active { transform: scale(0.97); }
   #btn-prev { background: rgba(40,31,21,0.07); color: var(--ink-2); }
   #btn-next {
-    background: var(--accent); color: #FFF8F2;
-    box-shadow: 0 4px 14px rgba(180,85,61,0.30);
+    background: var(--ok); color: #FFF8F2;
+    box-shadow: 0 4px 14px rgba(91,122,84,0.30);
   }
 
   /* 统计区：液态玻璃 */
@@ -613,8 +613,8 @@ html = """<!DOCTYPE html>
   footer button:active { transform: scale(0.97); }
   footer .btn-prev { background: rgba(255,255,255,0.35); color: var(--ink-2); border: 1px solid rgba(40,31,21,0.08); box-shadow: 0 1px 3px rgba(40,31,21,0.06); }
   footer .btn-next {
-    background: var(--accent); color: #FFF8F2;
-    box-shadow: 0 2px 4px rgba(180,85,61,0.25), 0 6px 18px rgba(180,85,61,0.30);
+    background: var(--ok); color: #FFF8F2;
+    box-shadow: 0 2px 4px rgba(91,122,84,0.25), 0 6px 18px rgba(91,122,84,0.30);
   }
 
   /* 键盘焦点可见性 */
@@ -1173,12 +1173,13 @@ function initDropdown(which) {
       document.getElementById("btn-fav").classList.remove("active");
       state.order = filterQuestions();
       saveState();
-      // 更新 UI
+      // 更新选中态
       document.getElementById(meta.label).textContent = meta.map[val] || val;
       opts.forEach(o => o.classList.toggle("selected", o === opt));
+      // 先收起面板（动画完整跑完），再渲染内容——避免与 render 同帧打断收起动画
       panel.classList.remove("show");
       btn.classList.remove("open");
-      render("card");
+      setTimeout(() => render("card"), 280);
     });
   });
 }
