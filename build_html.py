@@ -13,7 +13,7 @@ html = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>消防安全公共知识 · 刷题</title>
 <style>
   /* ============ Design Tokens (Anthropic 路线) ============ */
@@ -83,14 +83,18 @@ html = """<!DOCTYPE html>
   .bg-deco {
     position: fixed;
     inset: 0;
+    width: 100%;
+    height: 100%;
     z-index: 0;
     pointer-events: none;
     overflow: hidden;
+    contain: strict;  /* 防止子元素撑开滚动区域 */
   }
   .bg-deco .blob {
     position: absolute;
     border-radius: 38% 62% 55% 45% / 45% 40% 60% 55%;  /* 不规则柔和形状 */
     filter: blur(2px);
+    max-width: 100%;
   }
   .bg-deco .b1 { width: 340px; height: 300px; top: -60px; left: -80px; background: rgba(222, 190, 170, 0.38); transform: rotate(12deg); }
   .bg-deco .b2 { width: 280px; height: 260px; top: 30%; right: -90px; background: rgba(210, 190, 165, 0.30); transform: rotate(-18deg); }
@@ -563,13 +567,38 @@ html = """<!DOCTYPE html>
   /* 手机窄屏 */
   @media (max-width: 480px) {
     header h1 { font-size: 20px; }
-    .toolbar { margin: 4px 10px 10px; }
-    .toolbar select { flex: 1 1 100%; }
+    header { padding: 14px 16px 10px; }
+    .toolbar { margin: 4px 10px 10px; gap: 8px; padding: 10px 10px; }
+    /* 工具栏按钮小屏时两行排列，保证可点 */
+    .toolbar .drop { flex: 1 1 46%; }
+    .toolbar button { flex: 1 1 30%; padding: 12px 10px; font-size: 13.5px; }
+    .toolbar .btn-clear { flex: 1 1 100%; }
     #quiz-area { padding: 2px 10px 8px; }
-    .progress { margin: 0 10px 12px; }
+    .progress { margin: 0 10px 12px; padding: 8px 12px; }
     .stats { margin: 4px 10px 12px; }
     footer { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
-    .q-stem { font-size: 15.5px; }
+    .q-stem { font-size: 16px; line-height: 1.8; }
+    /* 触摸目标放大（44px 触控标准） */
+    .opt { padding: 15px 16px; font-size: 15.5px; }
+    .judge-btn { padding: 22px; }
+    .fill-input { padding: 15px 16px; font-size: 17px; }
+    .fill-submit { padding: 16px; }
+    .self-btn { padding: 16px; }
+    footer .dock { padding: 10px; }
+    footer button { padding: 15px; font-size: 15.5px; }
+    .card { padding: 20px 16px; }
+    /* 背景消防元素小屏时淡化（避免遮挡） */
+    .bg-deco .fire-svg { opacity: 0.12; }
+  }
+
+  /* 超窄屏（<360px，老安卓） */
+  @media (max-width: 360px) {
+    header h1 { font-size: 18px; }
+    .brand-en { display: none; }
+    .toolbar .drop { flex: 1 1 100%; }
+    .toolbar button { flex: 1 1 46%; }
+    .q-head .crumb { font-size: 11.5px; }
+    .q-head .tag { font-size: 11.5px; }
   }
 </style>
 </head>
@@ -770,8 +799,16 @@ html = """<!DOCTYPE html>
 // ===== 数据（内嵌） =====
 const QUESTIONS = __DATA__;
 
-// ===== 状态管理（localStorage 持久化） =====
+// ===== 状态管理（localStorage 持久化，file:// 下兼容降级） =====
 const LS_KEY = "fire_quiz_v1";
+// 部分安卓浏览器 file:// 下 localStorage 不可用（隐私模式/WebView），降级为内存态
+let storageOk = true;
+try {
+  localStorage.setItem("__t", "1");
+  localStorage.removeItem("__t");
+} catch (e) {
+  storageOk = false;
+}
 let state = {
   mode: "paper",        // paper | wrong | fav
   paper: "ALL",
@@ -785,9 +822,13 @@ let state = {
   totalOk: 0,
 };
 function loadState() {
+  if (!storageOk) return;
   try { const s = localStorage.getItem(LS_KEY); if (s) state = Object.assign(state, JSON.parse(s)); } catch(e) {}
 }
-function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+function saveState() {
+  if (!storageOk) return;
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) {}
+}
 function qidOf(q, i) { return q.paper + "-" + q.type + "-" + q.no + "-" + i; }
 
 // ===== 题序生成 =====
@@ -959,9 +1000,10 @@ function initDropdown(which) {
 
   function positionPanel() {
     const r = btn.getBoundingClientRect();
-    const pw = panel.offsetWidth || r.width;
-    // 面板宽度跟随按钮，居中于按钮
-    panel.style.width = Math.max(r.width, 140) + "px";
+    // 面板宽度跟随按钮，手机窄屏时给足宽度保证选项可读
+    let pw = Math.max(r.width, 140);
+    if (window.innerWidth < 480) pw = Math.min(Math.max(r.width, window.innerWidth - 40), window.innerWidth - 20);
+    panel.style.width = pw + "px";
     panel.style.left = Math.min(r.left, window.innerWidth - pw - 8) + "px";
     panel.style.top = (r.bottom + 6) + "px";
   }
