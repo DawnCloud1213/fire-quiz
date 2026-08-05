@@ -941,6 +941,13 @@ function migrateState() {
     else if (lookup[k]) { newAnswered[k] = state.answered[k]; }
   });
   if (changed) state.answered = newAnswered;
+  // 旧版简答记录（无 pending 字段）→ 标记为已自评（保持锁定语义）
+  Object.keys(state.answered).forEach(k => {
+    const a = state.answered[k];
+    if (a && a.my === "self-ok" || a && a.my === "self-no") {
+      if (a.text === undefined) { a.text = a.my; a.pending = false; }
+    }
+  });
   // wrongIds / favIds
   state.wrongIds = state.wrongIds.map(k => k.replace(/-\d+$/, "")).filter(k => lookup[k]);
   state.favIds = state.favIds.map(k => k.replace(/-\d+$/, "")).filter(k => lookup[k]);
@@ -1076,9 +1083,6 @@ function render(animate) {
       h += `<div class="feedback show ${ok ? "ok" : "err"}">${ok ? "✅ 回答正确！" : "❌ 回答错误"}`;
       if (!ok) h += `<br>正确答案：<b>${escapeHtml(String(q.answer))}</b>`;
       h += '</div>';
-    } else if (answered && q.type === "short" && answered.my) {
-      const ok = answered.ok;
-      h += `<div class="feedback show ${ok ? "ok" : "err"}">${ok ? "✅ 自评：答对了！" : "❌ 自评：没答对（已加入错题本）"}</div>`;
     }
     return h;
   }
