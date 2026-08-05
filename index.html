@@ -889,13 +889,40 @@ let state = {
 };
 function loadState() {
   if (!storageOk) return;
-  try { const s = localStorage.getItem(LS_KEY); if (s) state = Object.assign(state, JSON.parse(s)); } catch(e) {}
+  try {
+    const s = localStorage.getItem(LS_KEY);
+    if (s) {
+      state = Object.assign(state, JSON.parse(s));
+      migrateState();
+    }
+  } catch(e) {}
+}
+// 迁移旧版 qid（含 index 后缀）→ 新版 qid（卷-题型-题号）
+function migrateState() {
+  const lookup = {};
+  QUESTIONS.forEach(q => { lookup[q.paper + "-" + q.type + "-" + q.no] = true; });
+  let changed = false;
+  // answered
+  const newAnswered = {};
+  Object.keys(state.answered).forEach(k => {
+    const base = k.replace(/-\d+$/, "");
+    if (lookup[base] && !newAnswered[base]) { newAnswered[base] = state.answered[k]; changed = true; }
+    else if (lookup[k]) { newAnswered[k] = state.answered[k]; }
+  });
+  if (changed) state.answered = newAnswered;
+  // wrongIds / favIds
+  state.wrongIds = state.wrongIds.map(k => k.replace(/-\d+$/, "")).filter(k => lookup[k]);
+  state.favIds = state.favIds.map(k => k.replace(/-\d+$/, "")).filter(k => lookup[k]);
+  // 去重
+  state.wrongIds = [...new Set(state.wrongIds)];
+  state.favIds = [...new Set(state.favIds)];
 }
 function saveState() {
   if (!storageOk) return;
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) {}
 }
-function qidOf(q, i) { return q.paper + "-" + q.type + "-" + q.no + "-" + i; }
+// 题目唯一标识：卷+题型+题号（不含 index——同一题在任何题序下 qid 一致，防止重复计分）
+function qidOf(q) { return q.paper + "-" + q.type + "-" + q.no; }
 
 // ===== 题序生成 =====
 function filterQuestions() {
@@ -904,11 +931,11 @@ function filterQuestions() {
   if (state.type !== "ALL") list = list.filter(x => x.q.type === state.type);
   if (state.mode === "wrong") {
     const w = new Set(state.wrongIds);
-    list = list.filter(x => w.has(qidOf(x.q, x.i)));
+    list = list.filter(x => w.has(qidOf(x.q)));
   }
   if (state.mode === "fav") {
     const f = new Set(state.favIds);
-    list = list.filter(x => f.has(qidOf(x.q, x.i)));
+    list = list.filter(x => f.has(qidOf(x.q)));
   }
   return list.map(x => x.i);
 }
@@ -950,7 +977,7 @@ function render(animate) {
 
   const i = state.order[state.idx];
   const q = QUESTIONS[i];
-  const qid = qidOf(q, i);
+  const qid = qidOf(q);
   const answered = state.answered[qid];
 
   const done = Object.keys(state.answered).length;
@@ -1216,7 +1243,7 @@ document.getElementById("btn-random").onclick = () => {
   document.getElementById("btn-random").classList.toggle("active", state.shuffle);
   if (state.shuffle) {
     // 随机模式：只从未答题中抽取（已答过的不再出现）
-    const list = filterQuestions().filter(i => !state.answered[qidOf(QUESTIONS[i], i)]);
+    const list = filterQuestions().filter(i => !state.answered[qidOf(QUESTIONS[i])]);
     for (let i=list.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [list[i],list[j]]=[list[j],list[i]]; }
     state.order = list;
   } else {
