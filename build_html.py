@@ -440,30 +440,29 @@ html = """<!DOCTYPE html>
   .fill-submit:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(180,85,61,0.25); }
 
   .short-ans { margin-top: 16px; border-top: 1px dashed rgba(40,31,21,0.15); padding-top: 14px; }
-  .short-ans summary {
+  .ans-toggle {
     cursor: pointer; color: var(--accent-strong);
     font-size: 14px; font-weight: 600;
     font-family: var(--font-body);
-    list-style: none;
+    background: none; border: none; padding: 0;
     display: flex; align-items: center; gap: 6px;
     -webkit-user-select: none; user-select: none;
   }
-  .short-ans summary::-webkit-details-marker { display: none; }
-  .short-ans summary .chev {
+  .ans-toggle .chev {
     display: inline-block;
     transition: transform 300ms var(--spring-standard);
     font-size: 10px;
   }
-  .short-ans details[open] summary .chev { transform: rotate(180deg); }
-  /* 手风琴展开：grid 0fr→1fr 可动画高度（Chrome 107+/Safari 16+，双端兼容） */
+  .ans-toggle.open .chev { transform: rotate(180deg); }
+  /* 手风琴展开：grid 0fr→1fr 可动画高度（容器始终 display:block，transition 才能生效） */
   .ans-wrap {
     display: grid;
     grid-template-rows: 0fr;
     transition: grid-template-rows 350ms var(--spring-standard);
   }
-  .short-ans details[open] .ans-wrap { grid-template-rows: 1fr; }
+  .ans-wrap.open { grid-template-rows: 1fr; }
   .ans-wrap > div { overflow: hidden; }
-  .short-ans .ans-body {
+  .ans-wrap .ans-body {
     margin-top: 10px; font-size: 14.5px; line-height: 1.9;
     color: var(--ink-2);
     background: rgba(255,255,255,0.45);
@@ -472,7 +471,7 @@ html = """<!DOCTYPE html>
     transform: translateY(-6px);
     transition: opacity 250ms ease 80ms, transform 250ms var(--spring-standard) 80ms;
   }
-  .short-ans details[open] .ans-body {
+  .ans-wrap.open .ans-body {
     opacity: 1;
     transform: none;
   }
@@ -969,7 +968,7 @@ function render(animate) {
       h += `<input class="fill-input" id="fill-input" type="text" placeholder="请输入答案" value="${answered && answered.my ? escapeHtml(String(answered.my)) : ""}">`;
       h += `<button class="fill-submit" onclick="submitFill('${qid}')">${answered ? "重新提交" : "提交答案"}</button>`;
     } else {
-      h += '<div class="short-ans"><details><summary><span class="chev">▼</span>查看参考答案</summary><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div></details></div>';
+      h += '<div class="short-ans"><button class="ans-toggle" onclick="toggleAns(this)"><span class="chev">▼</span>查看参考答案</button><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div></div>';
       h += '<div class="self-row">';
       h += `<button class="self-btn self-ok ${answered && answered.my === 'self-ok' ? 'chosen' : ''}" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
       h += `<button class="self-btn self-no ${answered && answered.my === 'self-no' ? 'chosen' : ''}" onclick="answer('${qid}','self-no')">❌ 我没答对</button>`;
@@ -1234,6 +1233,13 @@ function toggleFav(qid) {
   if (i >= 0) state.favIds.splice(i, 1);
   else state.favIds.push(qid);
   saveState(); render(false);
+}
+
+// 简答题答案手风琴展开/收起
+function toggleAns(btn) {
+  btn.classList.toggle("open");
+  const wrap = btn.nextElementSibling;
+  if (wrap) wrap.classList.toggle("open");
 }
 document.getElementById("btn-next").onclick = next;
 document.getElementById("btn-prev").onclick = prev;
