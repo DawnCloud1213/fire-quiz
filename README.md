@@ -44,5 +44,6 @@ python build_html.py   # 生成新 index.html
 
 ## 📈 版本历史
 
+- **v0.3** 🚧 PWA 化（manifest + Service Worker + 图标，离线可用、可添加到主屏幕）
 - **v0.2** ✅ 视觉升级（Anthropic 风格 + 毛玻璃 + 消防场景背景）+ 收藏/清除记录 + upsert 答题
 - **v0.1** ✅ 功能完整版（四题型、严格匹配、自评、错题本、localStorage 持久化）

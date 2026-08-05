@@ -14,6 +14,8 @@ html = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#B4553D">
 <title>消防安全公共知识 · 刷题</title>
 <style>
   /* ============ Design Tokens (Anthropic 路线) ============ */
@@ -1299,6 +1301,13 @@ if (state.shuffle && state.order.length) {
   state.order = filterQuestions();
 }
 render(false);
+
+// ===== PWA：注册 Service Worker（https 或 localhost 才注册，file:// 跳过） =====
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
