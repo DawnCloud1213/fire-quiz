@@ -965,13 +965,30 @@ function record(qid, ok, my) {
   }
   state.answered[qid] = {ok, my};
   saveState();
+  // 答对自动下一题（延迟 700ms 展示反馈；最后一题或空题序不跳）
+  if (ok) {
+    clearTimeout(state._autoNextTimer);
+    const fromIdx = state.idx;   // 记录触发时位置，模式切换后不跳
+    const fromOrder = state.order;
+    state._autoNextTimer = setTimeout(() => {
+      // 保护：仅当题序和位置都没变（用户没手动切换/跳题）才自动前进
+      if (state.order === fromOrder && state.idx === fromIdx &&
+          state.order.length && state.idx < state.order.length - 1) {
+        state.idx++;
+        saveState();
+        render(true);
+      }
+    }, 700);
+  }
 }
 
 // ===== 导航（切题带卡片动画） =====
 function next() {
+  clearTimeout(state._autoNextTimer);
   if (state.idx < state.order.length - 1) { state.idx++; saveState(); render(true); }
 }
 function prev() {
+  clearTimeout(state._autoNextTimer);
   if (state.idx > 0) { state.idx--; saveState(); render(true); }
 }
 
@@ -1062,7 +1079,8 @@ function restoreDropdown() {
 }
 
 document.getElementById("btn-random").onclick = () => {
-  const list = filterQuestions().slice();
+  // 随机模式：只从未答题中抽取（已答过的不再出现）
+  const list = filterQuestions().filter(i => !state.answered[qidOf(QUESTIONS[i], i)]);
   for (let i=list.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [list[i],list[j]]=[list[j],list[i]]; }
   state.order = list; state.idx = 0; saveState(); render(true);
 };
