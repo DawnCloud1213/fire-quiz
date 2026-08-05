@@ -802,6 +802,7 @@ let state = {
   mode: "paper",        // paper | wrong | fav
   paper: "ALL",
   type: "ALL",
+  shuffle: false,       // 随机 toggle 状态
   order: [],
   idx: 0,
   answered: {},
@@ -1034,6 +1035,10 @@ function initDropdown(which) {
       const val = opt.dataset.val;
       state[meta.key] = val;
       state.mode = "paper"; state.idx = 0;
+      state.shuffle = false;
+      document.getElementById("btn-random").classList.remove("active");
+      document.getElementById("btn-wrong").classList.remove("active");
+      document.getElementById("btn-fav").classList.remove("active");
       state.order = filterQuestions();
       saveState();
       // 更新 UI
@@ -1079,19 +1084,32 @@ function restoreDropdown() {
 }
 
 document.getElementById("btn-random").onclick = () => {
-  // 随机模式：只从未答题中抽取（已答过的不再出现）
-  const list = filterQuestions().filter(i => !state.answered[qidOf(QUESTIONS[i], i)]);
-  for (let i=list.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [list[i],list[j]]=[list[j],list[i]]; }
-  state.order = list; state.idx = 0; saveState(); render(true);
+  // 随机 toggle：再点一次恢复顺序
+  state.shuffle = !state.shuffle;
+  document.getElementById("btn-random").classList.toggle("active", state.shuffle);
+  if (state.shuffle) {
+    // 随机模式：只从未答题中抽取（已答过的不再出现）
+    const list = filterQuestions().filter(i => !state.answered[qidOf(QUESTIONS[i], i)]);
+    for (let i=list.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [list[i],list[j]]=[list[j],list[i]]; }
+    state.order = list;
+  } else {
+    // 恢复顺序：全部题（含已答，便于回顾）
+    state.order = filterQuestions();
+  }
+  state.idx = 0; saveState(); render(true);
 };
 document.getElementById("btn-wrong").onclick = () => {
   state.mode = state.mode === "wrong" ? "paper" : "wrong";
+  state.shuffle = false;
+  document.getElementById("btn-random").classList.remove("active");
   document.getElementById("btn-wrong").classList.toggle("active", state.mode === "wrong");
   document.getElementById("btn-fav").classList.remove("active");
   state.idx = 0; state.order = filterQuestions(); saveState(); render(true);
 };
 document.getElementById("btn-fav").onclick = () => {
   state.mode = state.mode === "fav" ? "paper" : "fav";
+  state.shuffle = false;
+  document.getElementById("btn-random").classList.remove("active");
   document.getElementById("btn-fav").classList.toggle("active", state.mode === "fav");
   document.getElementById("btn-wrong").classList.remove("active");
   state.idx = 0; state.order = filterQuestions(); saveState(); render(true);
@@ -1120,7 +1138,8 @@ document.addEventListener("keydown", e => {
 
 function resetProgress() {
   if (!confirm("确定清除全部进度和错题记录？")) return;
-  state = { mode:"paper", paper:"ALL", type:"ALL", order:[], idx:0, answered:{}, wrongIds:[], favIds:[], totalAnswered:0, totalOk:0 };
+  state = { mode:"paper", paper:"ALL", type:"ALL", shuffle:false, order:[], idx:0, answered:{}, wrongIds:[], favIds:[], totalAnswered:0, totalOk:0 };
+  document.getElementById("btn-random").classList.remove("active");
   state.order = filterQuestions();
   saveState(); render(true);
 }
@@ -1129,7 +1148,13 @@ window.resetProgress = resetProgress;
 // ===== 启动 =====
 loadState();
 restoreDropdown();
-state.order = filterQuestions();
+// 还原随机 toggle 状态（持久化的 order 直接复用，否则按筛选生成）
+if (state.shuffle && state.order.length) {
+  document.getElementById("btn-random").classList.add("active");
+} else {
+  state.shuffle = false;
+  state.order = filterQuestions();
+}
 render(false);
 </script>
 </body>
