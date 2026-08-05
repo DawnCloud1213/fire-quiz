@@ -921,6 +921,7 @@ let state = {
   paper: "ALL",
   type: "ALL",
   shuffle: false,       // 随机 toggle 状态
+  redoneIds: [],        // 错题模式下本轮已重做的题（提交后才显示结果）
   order: [],
   idx: 0,
   answered: {},
@@ -1027,8 +1028,10 @@ function render(animate) {
   const i = state.order[state.idx];
   const q = QUESTIONS[i];
   const qid = qidOf(q);
-  // 错题模式：视为未作答（先作答再出答案），重做不计统计
-  const answered = state.mode === "wrong" ? undefined : state.answered[qid];
+  // 错题模式：未重做的题视为未作答（先作答再出答案）；已重做提交的题显示结果
+  const answered = state.mode === "wrong"
+    ? (state.redoneIds.includes(qid) ? state.answered[qid] : undefined)
+    : state.answered[qid];
 
   const done = Object.keys(state.answered).length;
   document.getElementById("p-pos").textContent = (state.idx+1) + "/" + state.order.length;
@@ -1192,6 +1195,7 @@ function submitShort(qid) {
   if (!val.trim()) return;   // 空答案不提交
   // 提交简答：保存文本，进入"待自评"状态（不计数，自评时才计）
   state.answered[qid] = {ok: false, my: val, pending: true};
+  if (state.mode === "wrong" && !state.redoneIds.includes(qid)) state.redoneIds.push(qid);
   saveState();
   render(false);
 }
@@ -1204,6 +1208,7 @@ function submitShort(qid) {
 function record(qid, ok, my, text) {
   const redo = state.mode === "wrong";   // 错题模式 = 重做（不计数）
   if (state.answered[qid] && !redo && !text) return;
+  if (redo && !state.redoneIds.includes(qid)) state.redoneIds.push(qid);
   if (text) {
     // 简答自评：保留用户文本
     state.answered[qid] = {ok, my, text};
@@ -1373,6 +1378,7 @@ document.getElementById("btn-fav").onclick = () => {
 document.getElementById("btn-clear").onclick = () => {
   if (!confirm("确定清除全部答题记录和统计？\\n（错题集和收藏夹保留）")) return;
   state.answered = {};
+  state.redoneIds = [];   // 新一轮重做
   // 错题集保留（跨轮次）；收藏夹保留
   state.totalAnswered = 0;
   state.totalOk = 0;
@@ -1402,7 +1408,7 @@ document.addEventListener("keydown", e => {
 
 function resetProgress() {
   if (!confirm("确定清除全部进度和错题记录？")) return;
-  state = { mode:"paper", paper:"ALL", type:"ALL", shuffle:false, order:[], idx:0, answered:{}, wrongIds:[], favIds:[], totalAnswered:0, totalOk:0 };
+  state = { mode:"paper", paper:"ALL", type:"ALL", shuffle:false, redoneIds:[], order:[], idx:0, answered:{}, wrongIds:[], favIds:[], totalAnswered:0, totalOk:0 };
   document.getElementById("btn-random").classList.remove("active");
   state.order = filterQuestions();
   saveState(); render("card");
