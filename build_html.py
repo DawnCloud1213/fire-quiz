@@ -316,41 +316,57 @@ html = """<!DOCTYPE html>
     padding: 22px 20px;
     position: relative;
   }
-  /* ===== 切题动画：内容层过渡（容器稳定，Apple content transition） ===== */
-  /* 旧内容退出 */
+  /* ===== 切题动画：View Transitions 交叉过渡（大厂 fade-through 模式，无空窗） ===== */
+  .q-body { view-transition-name: quiz-body; }
+  /* 旧快照：轻微上移淡出 */
+  ::view-transition-old(quiz-body) {
+    animation: vtOld 140ms ease-in both;
+  }
+  @keyframes vtOld {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-6px); }
+  }
+  /* 新快照：从下方淡入（与旧内容交叉重叠） */
+  ::view-transition-new(quiz-body) {
+    animation: vtNew 240ms var(--spring-standard) both;
+  }
+  @keyframes vtNew {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+  /* 非 API 环境降级：旧内容快速淡出（无空窗感知的兜底） */
   .q-body.leaving {
     opacity: 0;
-    transform: translateY(-8px);
-    transition: opacity 150ms ease-in, transform 150ms ease-in;
-  }
-  /* 新内容进入 */
-  .q-body.entering {
-    animation: qBodyIn 350ms var(--spring-standard) both;
-  }
-  @keyframes qBodyIn {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: none; }
+    transform: translateY(-6px);
+    transition: opacity 140ms ease-in, transform 140ms ease-in;
   }
 
-  /* ===== 模式切换动画：整卡离场+入场（空间一致性，Apple §7） ===== */
+  /* ===== 模式切换动画：整卡 quick fade（M3 top-level 模式） ===== */
+  .card { view-transition-name: quiz-card; }
+  ::view-transition-old(quiz-card) {
+    animation: vtCardOld 140ms ease-in both;
+  }
+  @keyframes vtCardOld {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+  ::view-transition-new(quiz-card) {
+    animation: vtCardNew 240ms var(--spring-standard) both;
+  }
+  @keyframes vtCardNew {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
   .card-leave {
     opacity: 0;
-    transform: translateY(-10px);
-    transition: opacity 150ms ease-in, transform 150ms ease-in;
-  }
-  .card-enter {
-    animation: cardEnter 350ms var(--spring-standard) both;
-  }
-  @keyframes cardEnter {
-    from { opacity: 0; transform: translateY(14px); }
-    to   { opacity: 1; transform: none; }
+    transition: opacity 140ms ease-in;
   }
   .empty-leave {
     opacity: 0;
-    transition: opacity 150ms ease-in;
+    transition: opacity 140ms ease-in;
   }
   .empty-enter {
-    animation: qBodyIn 350ms var(--spring-standard) both;
+    animation: vtNew 240ms var(--spring-standard) both;
   }
 
   .q-head {
@@ -533,7 +549,9 @@ html = """<!DOCTYPE html>
   }
   .stat .lbl { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 
-  #empty { text-align: center; padding: 70px 24px; color: var(--ink-3); font-size: 15px; line-height: 2; }
+  #empty { text-align: center; padding: 70px 24px; color: var(--ink-3); font-size: 15px; line-height: 2; view-transition-name: quiz-empty; }
+  ::view-transition-old(quiz-empty) { animation: vtCardOld 140ms ease-in both; }
+  ::view-transition-new(quiz-empty) { animation: vtCardNew 240ms var(--spring-standard) both; }
   #empty button {
     margin-top: 18px; padding: 12px 28px;
     background: var(--accent); color: #FFF8F2;
@@ -605,8 +623,10 @@ html = """<!DOCTYPE html>
   /* 减少动效偏好 */
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
-    .q-body.leaving, .card-leave { opacity: 0; transform: none; }
-    .q-body.entering, .card-enter, .empty-enter { animation: none !important; opacity: 1; }
+    .q-body.leaving, .card-leave, .empty-leave { opacity: 1; transform: none; }
+    ::view-transition-old(quiz-body), ::view-transition-new(quiz-body),
+    ::view-transition-old(quiz-card), ::view-transition-new(quiz-card),
+    ::view-transition-old(quiz-empty), ::view-transition-new(quiz-empty) { animation: none !important; }
     .glass-liquid::after, .glass-frost::after { display: none; }
   }
   /* 减弱透明度偏好 */
@@ -918,7 +938,11 @@ function render(animate) {
           : '🎉 没有题了！<br><button onclick="resetProgress()">重置进度 / 清空错题</button>';
       document.getElementById("stats-row").style.display = "none";
     };
-    if (animate && (area.querySelector(".card") || empty.style.display === "block")) {
+    // 空状态过渡：优先 View Transitions（交叉淡入淡出），降级为旧内容淡出
+    const useVT = typeof document.startViewTransition === "function";
+    if (animate && useVT) {
+      document.startViewTransition(() => { doEmpty(); });
+    } else if (animate && (area.querySelector(".card") || empty.style.display === "block")) {
       const target = area.querySelector(".card") ? area.querySelector(".card") : empty;
       target.classList.add("empty-leave");
       setTimeout(doEmpty, 160);
@@ -970,8 +994,8 @@ function render(animate) {
     } else {
       h += '<div class="short-ans"><button class="ans-toggle" onclick="toggleAns(this)"><span class="chev">▼</span>查看参考答案</button><div class="ans-wrap"><div><div class="ans-body">' + escapeHtml(q.answer) + '</div></div></div></div>';
       h += '<div class="self-row">';
-      h += `<button class="self-btn self-ok ${answered && answered.my === 'self-ok' ? 'chosen' : ''}" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
       h += `<button class="self-btn self-no ${answered && answered.my === 'self-no' ? 'chosen' : ''}" onclick="answer('${qid}','self-no')">❌ 我没答对</button>`;
+      h += `<button class="self-btn self-ok ${answered && answered.my === 'self-ok' ? 'chosen' : ''}" onclick="answer('${qid}','self-ok')">✅ 我答对了</button>`;
       h += '</div>';
     }
     if (answered && q.type !== "short") {
@@ -988,8 +1012,7 @@ function render(animate) {
 
   const doRender = () => {
     let html = '<div class="card glass-frost">';
-    if (animate === "card") html = '<div class="card glass-frost card-enter">';
-    html += '<div class="q-body' + (animate === "qbody" ? ' entering' : '') + '">';
+    html += '<div class="q-body">';
     html += buildBody();
     html += '</div></div>';
     area.innerHTML = html;
@@ -1002,22 +1025,26 @@ function render(animate) {
     document.getElementById("s-rate").textContent = state.totalAnswered ? Math.round(state.totalOk/state.totalAnswered*100) + "%" : "0%";
   };
 
-  // 动画调度
-  if (animate === "qbody") {
-    // 切题：旧内容退出 → 替换 → 新内容进入（容器不动）
+  // 动画调度：优先 View Transitions API（交叉过渡，无空窗，大厂 fade-through 模式）
+  const useVT = typeof document.startViewTransition === "function";
+  if (animate && useVT) {
+    // View Transitions：浏览器自动截取新旧快照交叉过渡（只对带 view-transition-name 的元素）
+    document.startViewTransition(() => { doRender(); });
+  } else if (animate === "qbody") {
+    // 降级：切题（旧内容快速淡出 → 替换 → 新内容淡入）
     const oldBody = area.querySelector(".q-body");
     if (oldBody) {
       oldBody.classList.add("leaving");
-      setTimeout(doRender, 160);
+      setTimeout(doRender, 150);
     } else {
       doRender();
     }
   } else if (animate === "card") {
-    // 切模式：整卡离场 → 替换 → 整卡入场
+    // 降级：切模式（整卡淡出 → 替换 → 淡入）
     const oldCard = area.querySelector(".card");
     if (oldCard) {
       oldCard.classList.add("card-leave");
-      setTimeout(doRender, 160);
+      setTimeout(doRender, 150);
     } else {
       doRender();
     }
